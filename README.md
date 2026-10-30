@@ -14,6 +14,175 @@ It only **detects** these problems. It never extracts data, logs in by force, or
 
 ---
 
+## How to Use (Step by Step)
+
+This guide assumes you have never run a Python tool before. Commands are given for **Windows** (Command Prompt or PowerShell) and **Mac/Linux** (Terminal).
+
+### 1. Requirements
+
+| You need | Check if installed | Get it |
+|---|---|---|
+| **Python 3.8 or newer** | `python --version` (Mac/Linux: `python3 --version`) | https://www.python.org/downloads/ (on Windows, tick **"Add Python to PATH"** during install) |
+| **pip** (Python package installer, comes with Python) | `pip --version` (Mac/Linux: `pip3 --version`) | Included with Python |
+| **git** | `git --version` | https://git-scm.com/downloads |
+
+> On Mac/Linux, the commands are often `python3` and `pip3` instead of `python` and `pip`. Use whichever works on your machine.
+
+### 2. Download the project (clone)
+
+```bash
+git clone https://github.com/Q9Kawaii/web-vuln-scanner.git
+cd web-vuln-scanner
+```
+
+### 3. (Optional) Create a virtual environment
+
+A virtual environment keeps this project's libraries separate from the rest of your system. It's recommended but not required.
+
+**Windows:**
+```bat
+python -m venv venv
+venv\Scripts\activate
+```
+
+**Mac / Linux:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+When it is active, you will see `(venv)` at the start of your command line. Type `deactivate` to leave it.
+
+### 4. Install the required libraries
+
+```bash
+pip install -r requirements.txt
+```
+
+This installs `requests`, `beautifulsoup4`, `Jinja2` and `colorama`.
+
+### 5. Run a scan
+
+```bash
+python scanner.py -u <target-url> --depth 1 --checks sqli,xss,csrf --report report
+```
+
+For example, to scan the public practice site:
+
+```bash
+python scanner.py -u http://testphp.vulnweb.com/ --depth 1 --checks sqli,xss,csrf --report report
+```
+
+The scanner first shows a warning and asks for permission. Type `yes` and press Enter to start. Typing anything else cancels the scan.
+
+### 6. What the options mean
+
+| Option | What it does | Example |
+|---|---|---|
+| `-u` | The website address to start scanning from (required) | `-u http://testphp.vulnweb.com/` |
+| `--depth` | How many links deep to follow. `0` = only the start page, `1` = start page + pages it links to | `--depth 1` |
+| `--checks` | Which tests to run, separated by commas: `sqli`, `xss`, `csrf` | `--checks xss,csrf` |
+| `--report` | Name for the report files (without extension) | `--report report` → `report.html` and `report.json` |
+
+Run `python scanner.py --help` to see all options (delay, timeout, cookies, and so on).
+
+### 7. Sample output
+
+Shortened output from a scan of a small local test site (`...` marks lines that were cut):
+
+```
+==================================================
+  VulnScan - SQLi / XSS / CSRF detector
+  Black-box, detection only - educational use
+==================================================
+
+WARNING: Only scan websites you own or have written permission to test.
+Scanning other sites without permission may be illegal.
+Do you have permission to scan this target? Type 'yes' to continue: yes
+
+[1] Crawling http://127.0.0.1:8765/ (depth 1)
+  [crawl] depth=0 forms=2 http://127.0.0.1:8765/
+  [crawl] depth=1 forms=0 http://127.0.0.1:8765/user?id=1
+  [crawl] depth=1 forms=1 http://127.0.0.1:8765/search
+  [crawl] depth=1 forms=0 http://127.0.0.1:8765/safe?q=x
+Found 4 page(s) and 5 testable target(s).
+
+[2] Running checks: sqli, xss, csrf
+  [sqli] GET http://127.0.0.1:8765/user -> id
+    [!] SQL Injection (error-based) in 'id'
+  ...
+  [xss] GET http://127.0.0.1:8765/search -> q
+    [!] Reflected XSS in 'q'
+  ...
+  [csrf] analysing 3 forms and 12 Set-Cookie headers
+    [!] CSRF (no anti-CSRF token) at http://127.0.0.1:8765/comment
+    [!] CSRF (cookie without SameSite) at http://127.0.0.1:8765/
+
+=== Scan summary: 5 finding(s) ===
+[High] SQL Injection (error-based)
+    URL:       GET http://127.0.0.1:8765/user
+    Parameter: id
+    Payload:   1'
+...
+
+Reports saved: report.html, report.json
+```
+
+The report files are saved in the **folder you ran the command from** (normally the `web-vuln-scanner` folder):
+
+- `report.html` is a readable report with a colour-coded table of findings
+- `report.json` holds the same data in a machine-readable format
+
+### 8. Open the HTML report
+
+Double-click `report.html` in your file explorer, or open it from the command line:
+
+| System | Command |
+|---|---|
+| Windows | `start report.html` |
+| Mac | `open report.html` |
+| Linux | `xdg-open report.html` |
+
+### 9. Safe practice targets
+
+Only practise on sites that are **made for testing**:
+
+**testphp.vulnweb.com:** a public, intentionally vulnerable site run by Acunetix. Nothing to install:
+```bash
+python scanner.py -u http://testphp.vulnweb.com/ --depth 1 --report report
+```
+
+**DVWA (Damn Vulnerable Web Application):** runs on your own computer using Docker.
+1. Install Docker Desktop: https://www.docker.com/products/docker-desktop/
+2. Start DVWA:
+   ```bash
+   docker run --rm -it -p 8080:80 vulnerables/web-dvwa
+   ```
+3. Open http://localhost:8080 and log in with `admin` / `password`.
+4. Click **Create / Reset Database**, log in again, then go to **DVWA Security** and set the level to **Low**.
+5. Copy your `PHPSESSID` cookie (browser DevTools → Application/Storage → Cookies) and scan a page:
+   ```bash
+   python scanner.py -u http://localhost:8080/vulnerabilities/xss_r/ --depth 0 --cookie "PHPSESSID=<your id>; security=low" --report dvwa
+   ```
+6. Stop DVWA by pressing `Ctrl+C` in the Docker window.
+
+See the [Testing](#testing) section below for which results to expect.
+
+### 10. ⚠️ Warning
+
+**Only scan websites you own or have clear permission to test.** Scanning someone else's website without permission can be illegal, even if you don't cause any damage. The scanner submits forms and sends many requests, so never point it at real, live websites.
+
+### 11. Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `'python' is not recognized` / `python: command not found` | **Windows:** reinstall Python and tick **"Add Python to PATH"**, or try `py scanner.py ...`. **Mac/Linux:** use `python3` instead of `python`. |
+| `ModuleNotFoundError: No module named 'requests'` (or `bs4`, `jinja2`, `colorama`) | Run `pip install -r requirements.txt` again from inside the project folder. If you made a virtual environment, activate it first. On Mac/Linux try `pip3` or `python3 -m pip install -r requirements.txt`. |
+| `Could not load any HTML page from the target` / connection timeout | Check the URL in a browser first and include `http://` or `https://`. The site may be down or blocked by your network (college Wi-Fi often blocks such sites, so try mobile data). For slow sites, increase the timeout: `--timeout 30`. For DVWA, make sure the Docker container is still running. |
+| The scan seems stuck on `[sqli]` | This is normal. The time-based SQL injection test waits about 5 seconds per payload. Use `--depth 0` or `--max-pages 10` for a quicker scan. |
+
+---
+
 ## Project structure
 
 ```
